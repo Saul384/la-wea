@@ -8,8 +8,11 @@ import com.microserviciob.microb.entity.EntityB;
 import com.microserviciob.microb.entity.EntityBEntityA;
 import com.microserviciob.microb.repository.repositoryb;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -28,9 +31,42 @@ public class servicio {
         dto datos = new dto();
         datos.setId(entity.getId());
         datos.setNombreB(entity.getNombreB());
+        List<EntityBEntityA> relaciones = entity.getListaConEntityA();
+        if (relaciones != null && !relaciones.isEmpty()) {
+            datos.setEntityAId(relaciones.get(0).getEntityAId());
+        }
         return datos;
     }
 
+    /** Verifica en MS-A (Feign) que exista la entidad A; null = sin relación. */
+    private void validarEntityA(Integer entityAId) {
+        if (entityAId == null) {
+            return;
+        }
+        List<EntityADto> encontrados = clientFeignMSA.obtenerDTOsDelMSA(List.of(entityAId));
+        boolean existe = encontrados != null && encontrados.stream()
+                .anyMatch(a -> a != null && entityAId.equals(a.getId()));
+        if (!existe) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "La entidad A #" + entityAId + " no existe en MS-A");
+        }
+    }
+
+    /** Deja a B relacionado solo con entityAId (o sin relación si es null). */
+    private void asignarEntityA(EntityB entity, Integer entityAId) {
+        if (entity.getListaConEntityA() == null) {
+            entity.setListaConEntityA(new ArrayList<>());
+        }
+        // Se modifica la misma lista para que orphanRemoval borre la relación anterior.
+        entity.getListaConEntityA().clear();
+        if (entityAId != null) {
+            EntityBEntityA relacion = new EntityBEntityA();
+            relacion.setEntityAId(entityAId);
+            entity.getListaConEntityA().add(relacion);
+        }
+    }
+
+    @Transactional(readOnly = true)
     public List<dto> listar() {
         return repository.findAll()
                 .stream()
@@ -38,23 +74,30 @@ public class servicio {
                 .collect(Collectors.toList());
     }
 
+    @Transactional(readOnly = true)
     public dto buscar(Long id) {
         EntityB registro = repository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Registro no encontrado"));
         return convertirDTO(registro);
     }
 
+    @Transactional
     public dto crear(dto datos) {
+        validarEntityA(datos.getEntityAId());
         EntityB nuevo = new EntityB();
         nuevo.setNombreB(datos.getNombreB());
+        asignarEntityA(nuevo, datos.getEntityAId());
         EntityB guardado = repository.save(nuevo);
         return convertirDTO(guardado);
     }
 
+    @Transactional
     public dto actualizar(Long id, dto datos) {
         EntityB registro = repository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Registro no encontrado"));
+        validarEntityA(datos.getEntityAId());
         registro.setNombreB(datos.getNombreB());
+        asignarEntityA(registro, datos.getEntityAId());
         EntityB actualizado = repository.save(registro);
         return convertirDTO(actualizado);
     }
