@@ -15,6 +15,8 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
             .csrf(csrf -> csrf.disable())
+            // La consola H2 usa frames; sin esto Spring Security los bloquea.
+            .headers(headers -> headers.frameOptions(frame -> frame.sameOrigin()))
             .authorizeHttpRequests((authz) -> authz
                 .requestMatchers("/h2-console/**").permitAll()
                 .anyRequest().authenticated()

@@ -58,6 +58,7 @@ public class SecurityConfig {
             HttpSecurity http) throws Exception {
 
         http
+            .cors(Customizer.withDefaults()) // usa el bean de CorsConfig
             .oauth2AuthorizationServer(authorizationServer -> {
                 http.securityMatcher(
                     authorizationServer.getEndpointsMatcher()
