@@ -13,6 +13,7 @@ import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
 import java.util.UUID;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
@@ -43,6 +44,7 @@ import org.springframework.security.oauth2.server.authorization.settings.ClientS
 
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
+import org.springframework.security.web.savedrequest.HttpSessionRequestCache;
 import org.springframework.security.web.util.matcher.MediaTypeRequestMatcher;
 
 @Configuration
@@ -82,13 +84,31 @@ public class SecurityConfig {
     @Bean
     @Order(2)
     public SecurityFilterChain defaultSecurityFilterChain(
-            HttpSecurity http) throws Exception {
+            HttpSecurity http,
+            @Value("${app.frontend-url:http://localhost:3000}") String frontendUrl)
+            throws Exception {
+
+        // Esta cadena no guarda sus propias peticiones (/, /favicon.ico, /error...).
+        // Si lo hiciera, sobrescribiría la petición /oauth2/authorize guardada por la
+        // cadena 1 y, tras el login, el usuario acabaría en una página Whitelabel
+        // (status=999 o 404). Leer la petición guardada sigue funcionando.
+        HttpSessionRequestCache requestCache = new HttpSessionRequestCache();
+        requestCache.setRequestMatcher(request -> false);
 
         http
-            .authorizeHttpRequests(authorize ->
-                authorize.anyRequest().authenticated()
+            .authorizeHttpRequests(authorize -> authorize
+                .requestMatchers("/", "/login", "/error").permitAll()
+                .anyRequest().authenticated()
             )
-            .formLogin(Customizer.withDefaults());
+            .requestCache(cache -> cache.requestCache(requestCache))
+            // Página de login propia: LoginController + templates/login.html
+            .formLogin(login -> login
+                .loginPage("/login")
+                // Sin flujo OAuth en curso (login abierto directo en :9000),
+                // regresar a la consola en vez de a "/" del server.
+                .defaultSuccessUrl(frontendUrl + "/login", false)
+                .permitAll()
+            );
 
         return http.build();
     }
@@ -198,7 +218,52 @@ public class SecurityConfig {
 
                 .build();
 
-        return new InMemoryRegisteredClientRepository(oidcClient);
+        RegisteredClient frontendClient =
+                RegisteredClient.withId(UUID.randomUUID().toString())
+
+                .clientId("frontend-client")
+
+                .clientAuthenticationMethod(
+                    ClientAuthenticationMethod.NONE
+                )
+
+                .authorizationGrantType(
+                    AuthorizationGrantType.AUTHORIZATION_CODE
+                )
+
+                .authorizationGrantType(
+                    AuthorizationGrantType.REFRESH_TOKEN
+                )
+
+                .redirectUri(
+                    "http://localhost:3000/callback"
+                )
+
+                .redirectUri(
+                    "http://127.0.0.1:3000/callback"
+                )
+
+                // A dónde regresa el usuario tras /connect/logout
+                .postLogoutRedirectUri(
+                    "http://localhost:3000/login"
+                )
+
+                .scope(OidcScopes.OPENID)
+                .scope(OidcScopes.PROFILE)
+                .scope("read")
+                .scope("write")
+
+                .clientSettings(
+                    ClientSettings.builder()
+                        // Cliente público (sin secreto): PKCE obligatorio
+                        .requireProofKey(true)
+                        .requireAuthorizationConsent(false)
+                        .build()
+                )
+
+                .build();
+
+        return new InMemoryRegisteredClientRepository(oidcClient, frontendClient);
     }
 
     // 8. Usuario de prueba
