@@ -62,6 +62,12 @@
     <artifactId>spring-security-oauth2-authorization-server</artifactId>
 </dependency>
 
+<!-- Página de login propia (templates/login.html) -->
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-thymeleaf</artifactId>
+</dependency>
+
 </dependencies>
 
 	<build>
