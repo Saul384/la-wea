@@ -11,6 +11,6 @@ public class EntityBEntityA {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "entity_a_id")
+    @Column(name = "carrera_division_id")
     private Integer entityAId;
 }
