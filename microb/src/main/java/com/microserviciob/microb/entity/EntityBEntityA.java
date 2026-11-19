@@ -1,4 +1,3 @@
-
 package com.microserviciob.microb.entity;
 
 import jakarta.persistence.*;
@@ -6,7 +5,7 @@ import lombok.Data;
 
 @Data
 @Entity
-@Table(name = "entity_b_entity_a")
+@Table(name = "programa_division")
 public class EntityBEntityA {
 
     @Id
