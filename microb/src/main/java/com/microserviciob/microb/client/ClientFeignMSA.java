@@ -6,8 +6,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import com.microserviciob.microb.dto.EntityADto;
 import java.util.List;
 
-@FeignClient(name = "msa") 
+@FeignClient(name = "msa", url = "${msa.url:}") 
 public interface ClientFeignMSA {
     @PostMapping("/api/entity-a/by-ids")
-    List<EntityADto> obtenerDTOsDelMSA(@RequestBody List<Integer> ids);
+    List<EntityADto> obtenerDTOsDelMSA(@RequestBody List<Long> ids);
 }

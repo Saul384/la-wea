@@ -4,6 +4,18 @@ import lombok.Data;
 
 @Data
 public class EntityADto {
-    private Integer id;
-    private String nombreA;
+    private Long id;
+    private String nombre;
+    private Boolean estado;
+    private Boolean publica;
+    private String descripcion;
+
+    // Métodos de compatibilidad
+    public String getNombreA() {
+        return this.nombre;
+    }
+
+    public void setNombreA(String nombreA) {
+        this.nombre = nombreA;
+    }
 }

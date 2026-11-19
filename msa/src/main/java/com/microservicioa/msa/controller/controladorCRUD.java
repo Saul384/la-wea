@@ -8,7 +8,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/entity-a") 
+@RequestMapping("/api/entity-a")
 public class controladorCRUD {
 
     @Autowired
@@ -37,12 +37,12 @@ public class controladorCRUD {
     @DeleteMapping("/{id}")
     public String eliminar(@PathVariable Long id) {
         servicio.eliminar(id);
-        return "Registro eliminado correctamente";
+        return "División eliminada correctamente";
     }
 
-   @PostMapping("/by-ids")
-public ResponseEntity<List<dto>> getAllByIDs(@RequestBody List<Long> ids) {
-    List<dto> list = servicio.findAllByIDs(ids);
-    return ResponseEntity.ok(list);
-}
+    @PostMapping("/by-ids")
+    public ResponseEntity<List<dto>> getAllByIDs(@RequestBody List<Long> ids) {
+        List<dto> list = servicio.findAllByIDs(ids);
+        return ResponseEntity.ok(list);
+    }
 }
