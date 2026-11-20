@@ -32,6 +32,16 @@
         },
         {
             "type": "java",
+            "name": "Spring Boot-AlumnosApplication<alumnos>",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "mainClass": "com.microservicio.alumnos.AlumnosApplication",
+            "projectName": "alumnos",
+            "args": "",
+            "envFile": "${workspaceFolder}/.env"
+        },
+        {
+            "type": "java",
             "name": "Spring Boot-ServerApplication<server>",
             "request": "launch",
             "cwd": "${workspaceFolder}",
