@@ -2,6 +2,13 @@
     "configurations": [
         {
             "type": "java",
+            "name": "AsignaturasApplication",
+            "request": "launch",
+            "mainClass": "com.microservicio.asignaturas.AsignaturasApplication",
+            "projectName": ""
+        },
+        {
+            "type": "java",
             "name": "Spring Boot-ApigatewayApplication<apigateway>",
             "request": "launch",
             "cwd": "${workspaceFolder}",
