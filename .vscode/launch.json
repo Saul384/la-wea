@@ -2,10 +2,23 @@
     "configurations": [
         {
             "type": "java",
+            "name": "Spring Boot-AsignaturasApplication<asignaturas>",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "mainClass": "com.microservicio.asignaturas.AsignaturasApplication",
+            "projectName": "asignaturas",
+            "args": "",
+            "envFile": "${workspaceFolder}/.env"
+        },
+        {
+            "type": "java",
             "name": "AsignaturasApplication",
             "request": "launch",
+            "cwd": "${workspaceFolder}",
             "mainClass": "com.microservicio.asignaturas.AsignaturasApplication",
-            "projectName": ""
+            "projectName": "asignaturas",
+            "args": "",
+            "envFile": "${workspaceFolder}/.env"
         },
         {
             "type": "java",
