@@ -1,13 +1,13 @@
 package com.microservicio.alumnos.service;
 
 import com.microservicio.alumnos.client.ClientFeignAsignatura;
-import com.microservicio.alumnos.dto.EntityAsignaturaDto;
 import com.microservicio.alumnos.dto.EntityAlumnoDtoList;
+import com.microservicio.alumnos.dto.EntityAsignaturaDto;
 import com.microservicio.alumnos.dto.dto;
 import com.microservicio.alumnos.entity.EntityAlumno;
 import com.microservicio.alumnos.entity.EntityAlumnoAsignatura;
 import com.microservicio.alumnos.repository.repositoryAlumno;
-import org.springframework.beans.factory.annotation.Autowired;
+import feign.FeignException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,57 +22,85 @@ import java.util.stream.Collectors;
 @Service
 public class servicio {
 
-    @Autowired
-    private repositoryAlumno repositoryAlumno;
+    private final repositoryAlumno repositoryAlumno;
+    private final ClientFeignAsignatura clientFeignAsignatura;
 
-    @Autowired
-    private ClientFeignAsignatura clientFeignAsignatura;
+    public servicio(repositoryAlumno repositoryAlumno, ClientFeignAsignatura clientFeignAsignatura) {
+        this.repositoryAlumno = repositoryAlumno;
+        this.clientFeignAsignatura = clientFeignAsignatura;
+    }
 
     public dto convertirDTO(EntityAlumno entityAlumno) {
+        if (entityAlumno == null) {
+            return null;
+        }
         dto datos = new dto();
         datos.setId(entityAlumno.getId());
-        datos.setNombre(entityAlumno.getNombreAlumno());
-        datos.setNombre(entityAlumno.getMatriculaAlumno());
-        datos.setEstado(entityAlumno.getEstadoAlumno());
-
-        List<EntityAlumnoAsignatura> relaciones = entityAlumno.getListaConEntityAsignatura();
-        if (relaciones != null && !relaciones.isEmpty() && relaciones.get(0).getEntityAsignaturaId() != null) {
-            datos.setEntityAsignaturaId(relaciones.get(0).getEntityAsignaturaId());
-        }
+        datos.setNombreAlumno(entityAlumno.getNombreAlumno());
+        datos.setMatricula(entityAlumno.getMatricula());
+        datos.setEstadoAlumno(entityAlumno.getEstadoAlumno());
+        datos.setEntityAsignaturaId(entityAlumno.obtenerAsignaturaId());
         return datos;
     }
 
-    /** Verifica en Asignaturas (Feign) que exista la asignatura; null = sin relación. */
-    private void validarEntityAsignatura(Long entityAsignaturaId) {
+    /**
+     * Valida con el microservicio de Asignaturas (OpenFeign) que la asignatura exista.
+     * Si entityAsignaturaId es null, la relación es opcional.
+     */
+    public void validarEntityAsignatura(Long entityAsignaturaId) {
         if (entityAsignaturaId == null) {
             return;
         }
         try {
-            List<EntityAsignaturaDto> encontrados = clientFeignAsignatura.obtenerDTOsDelAsignatura(List.of(entityAsignaturaId));
+            List<EntityAsignaturaDto> encontrados =
+                    clientFeignAsignatura.obtenerDTOsDelAsignatura(List.of(entityAsignaturaId));
+
             boolean existe = encontrados != null && encontrados.stream()
                     .anyMatch(a -> a != null && entityAsignaturaId.equals(a.getId()));
+
             if (!existe) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "La Asignatura #" + entityAsignaturaId + " no existe en Microservicio-Asignaturas");
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "La Asignatura #" + entityAsignaturaId + " no existe en el microservicio de Asignaturas"
+                );
             }
         } catch (ResponseStatusException rse) {
             throw rse;
+        } catch (FeignException.NotFound e) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "La Asignatura #" + entityAsignaturaId + " no existe en el microservicio de Asignaturas"
+            );
         } catch (Exception e) {
-            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
-                    "No se pudo contactar al Microservicio-Asignaturas para verificar la asignatura: " + e.getMessage());
+            throw new ResponseStatusException(
+                    HttpStatus.SERVICE_UNAVAILABLE,
+                    "No fue posible contactar al microservicio de Asignaturas para validar la asignatura #" + entityAsignaturaId
+            );
         }
     }
 
-    /** Deja a Carrera relacionada solo con entityAsignaturaId (o sin relación si es null). */
-    private void asignarEntityA(EntityAlumno entityAlumno, Long entityAsiganturaId) {
-        if (entityAlumno.getListaConEntityAsignatura() == null) {
-            entityAlumno.setListaConEntityAsignatura(new ArrayList<>());
+    private void asignarEntityAsignatura(EntityAlumno entityAlumno, Long entityAsignaturaId) {
+        entityAlumno.asignarAsignatura(entityAsignaturaId);
+    }
+
+    private void validarDatos(dto datos) {
+        if (datos == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Los datos del alumno no pueden ser nulos");
         }
-        entityAlumno.getListaConEntityAsignatura().clear();
-        if (entityAsignaturaId != null) {
-            EntityAlumnoEntityAsignatura relacion = new EntityAlumnoEntityAsignatura();
-            relacion.setEntityAsignaturaId(entityAsignaturaId);
-            entityAlumno.getListaConEntityAsignatura().add(relacion);
+        String nombre = datos.getNombreAlumno() != null ? datos.getNombreAlumno().trim() : null;
+        if (nombre == null || nombre.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El nombre del alumno es obligatorio");
+        }
+        if (nombre.length() > 100) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El nombre no puede superar los 100 caracteres");
+        }
+
+        String matricula = datos.getMatricula() != null ? datos.getMatricula().trim() : null;
+        if (matricula == null || matricula.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La matrícula es obligatoria");
+        }
+        if (matricula.length() > 50) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La matrícula no puede superar los 50 caracteres");
         }
     }
 
@@ -86,65 +114,121 @@ public class servicio {
 
     @Transactional(readOnly = true)
     public dto buscar(Long id) {
+        if (id == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El ID de alumno es obligatorio");
+        }
         EntityAlumno registro = repositoryAlumno.findById(id)
-                .orElseThrow(() -> new RuntimeException("Alumno no encontrado!"));
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Alumno #" + id + " no encontrado"
+                ));
         return convertirDTO(registro);
     }
 
     @Transactional
     public dto crear(dto datos) {
+        validarDatos(datos);
         validarEntityAsignatura(datos.getEntityAsignaturaId());
-        EntityAlumno nuevo = new EntityAlumno();
-        String nombreAlumno = datos.getNombreAlumno() != null ? datos.getNombreAlumno() : datos.getNombreAlumno();
-        String matricula = datos.getMatricula() != null ? datos.getMatricula() : datos.getMatricula();
-        nuevo.setNombreAlumno(nombreAlumno != null ? nombreAlumno : "Sin nombre");
-        nuevo.setMatricula(matricula != null ? matricula : "Sin matricula");
-        nuevo.setEstadoAlumno(datos.getEstadoAlumno() != null ? datos.getEstadoAlumno() : true);
-        asignarEntityAsignatura(nuevo, datos.getEntityAasignaturaId());
 
-        EntityAlumno guardado = Alumno.save(nuevo);
+        EntityAlumno nuevo = new EntityAlumno();
+        nuevo.setNombreAlumno(datos.getNombreAlumno().trim());
+        nuevo.setMatricula(datos.getMatricula().trim());
+        nuevo.setEstadoAlumno(datos.getEstadoAlumno() != null ? datos.getEstadoAlumno() : true);
+        asignarEntityAsignatura(nuevo, datos.getEntityAsignaturaId());
+
+        EntityAlumno guardado = repositoryAlumno.save(nuevo);
         return convertirDTO(guardado);
     }
 
     @Transactional
     public dto actualizar(Long id, dto datos) {
-        EntityAlumno registro = repositoryAlumno.findById(id)
-                .orElseThrow(() -> new RuntimeException("Alumno no encontrado!"));
-        validarEntityAsignatura(datos.getEntityAsignaturaId());
-
-        if (datos.getNombreAlumno() != null || datos.getNombreAlumno() != null) {
-            String nombreAlumno = datos.getNombreAlumno() != null ? datos.getNombreAlumno() : datos.getNombreAlumno();
-            registro.setNombreAlumno(nombreAlumno);
+        if (id == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El ID de alumno es obligatorio");
         }
-        if (datos.getMatricula() != null || datos.getMatricula() != null) {
-            String matricula = datos.getMatricula() != null ? datos.getMatricula() : datos.getMatricula();
+        if (datos == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Los datos de actualización no pueden ser nulos");
+        }
+
+        EntityAlumno registro = repositoryAlumno.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Alumno #" + id + " no encontrado"
+                ));
+
+        if (datos.getNombreAlumno() != null) {
+            String nombre = datos.getNombreAlumno().trim();
+            if (nombre.isBlank()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El nombre no puede estar vacío");
+            }
+            if (nombre.length() > 100) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El nombre no puede superar los 100 caracteres");
+            }
+            registro.setNombreAlumno(nombre);
+        }
+
+        if (datos.getMatricula() != null) {
+            String matricula = datos.getMatricula().trim();
+            if (matricula.isBlank()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La matrícula no puede estar vacía");
+            }
+            if (matricula.length() > 50) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La matrícula no puede superar los 50 caracteres");
+            }
             registro.setMatricula(matricula);
         }
+
         if (datos.getEstadoAlumno() != null) {
             registro.setEstadoAlumno(datos.getEstadoAlumno());
         }
-        
-        asignarEntityAsignatura(registro, datos.getEntityAsignaturaId());
+
+        // Si se envió entityAsignaturaId (incluyendo explícitamente null para desasociar)
+        if (datos.getEntityAsignaturaId() != null) {
+            validarEntityAsignatura(datos.getEntityAsignaturaId());
+            asignarEntityAsignatura(registro, datos.getEntityAsignaturaId());
+        }
 
         EntityAlumno actualizado = repositoryAlumno.save(registro);
         return convertirDTO(actualizado);
     }
 
     @Transactional
-    public void eliminar(Long id) {
-        if (!repositoryAlumno.existsById(id)) {
-            throw new RuntimeException("Alumno no encontrado!");
+    public dto cambiarEstado(Long id, boolean estado) {
+        if (id == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El ID de alumno es obligatorio");
         }
-        repository.deleteById(id);
+        EntityAlumno registro = repositoryAlumno.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Alumno #" + id + " no encontrado"
+                ));
+        registro.setEstadoAlumno(estado);
+        return convertirDTO(repositoryAlumno.save(registro));
     }
 
+    @Transactional
+    public void eliminar(Long id) {
+        if (id == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El ID de alumno es obligatorio");
+        }
+        if (!repositoryAlumno.existsById(id)) {
+            throw new ResponseStatusException(
+                    HttpStatus.NOT_FOUND,
+                    "Alumno #" + id + " no encontrado"
+            );
+        }
+        repositoryAlumno.deleteById(id);
+    }
+
+    /**
+     * Consulta combinada de alumnos con los nombres de sus asignaturas correspondientes
+     * obtenidas en batch a través de OpenFeign hacia el microservicio de Asignaturas.
+     */
     @Transactional(readOnly = true)
     public List<EntityAlumnoDtoList> findAll() {
         List<EntityAlumno> datosAlumno = repositoryAlumno.findAll();
+
         List<Long> idsRelacionados = datosAlumno.stream()
-                .filter(alumno -> alumno.getListaConEntityAsignatura() != null)
-                .flatMap(alumno -> alumno.getListaConEntityAsignatura().stream())
-                .map(EntityAlumnoEntityAsignatura::getEntityAsignaturaId)
+                .map(EntityAlumno::obtenerAsignaturaId)
                 .filter(id -> id != null)
                 .distinct()
                 .collect(Collectors.toList());
@@ -152,7 +236,9 @@ public class servicio {
         Map<Long, String> asignaturaMap = new HashMap<>();
         if (!idsRelacionados.isEmpty()) {
             try {
-                List<EntityAsignaturaDto> listaAsignaturas = clientFeignAsignatura.obtenerDTOsDelAsignatura(idsRelacionados);
+                List<EntityAsignaturaDto> listaAsignaturas =
+                        clientFeignAsignatura.obtenerDTOsDelAsignatura(idsRelacionados);
+
                 if (listaAsignaturas != null) {
                     for (EntityAsignaturaDto asig : listaAsignaturas) {
                         if (asig != null && asig.getId() != null) {
@@ -161,28 +247,27 @@ public class servicio {
                     }
                 }
             } catch (Exception e) {
-                // En caso de que Microservicio-Asignatura no responda en ese momento
+                // Si el microservicio de Asignaturas no responde o falla, mantenemos fallback
             }
         }
 
         return datosAlumno.stream()
-                .map(e -> {
+                .map(alumno -> {
                     EntityAlumnoDtoList dtoResult = new EntityAlumnoDtoList();
-                    dtoResult.setId(e.getId());
-                    dtoResult.setNombreAlumno(e.getNombreAlumno());
-                    dtoResult.setMatricula(e.getMatricula());
-                    dtoResult.setEstadoAlumno(e.getEstadoAlumno());
+                    dtoResult.setId(alumno.getId());
+                    dtoResult.setNombreAlumno(alumno.getNombreAlumno());
+                    dtoResult.setMatricula(alumno.getMatricula());
+                    dtoResult.setEstadoAlumno(alumno.getEstadoAlumno());
 
-                    if (e.getListaConEntityAsignatura() != null && !e.getListaConEntityAsignatura().isEmpty()) {
-                        EntityAlumnoEntityAsignatura relacion = e.getListaConEntityAsigantura().get(0);
-                        if (relacion != null && relacion.getEntityAsignaturaId() != null) {
-                            dtoResult.setEntityAsignaturaId(relacion.getEntityAsignaturaId());
-                            String nombreAsigna = asignaturaMap.get(relacion.getEntityAsignaturaId());
-                            dtoResult.setNombreAsignatura(nombreAsigna != null ? nombreAsigna : "Asignatura #" + relacion.getEntityAsignaturaId());
-                        } else {
-                            dtoResult.setNombreAsignatura("Sin Asignatura");
-                        }
+                    Long asigId = alumno.obtenerAsignaturaId();
+                    if (asigId != null) {
+                        dtoResult.setEntityAsignaturaId(asigId);
+                        String nombreAsig = asignaturaMap.get(asigId);
+                        dtoResult.setNombreAsignatura(
+                                nombreAsig != null ? nombreAsig : "Asignatura #" + asigId
+                        );
                     } else {
+                        dtoResult.setEntityAsignaturaId(null);
                         dtoResult.setNombreAsignatura("Sin Asignatura");
                     }
                     return dtoResult;
